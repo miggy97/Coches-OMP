@@ -34,79 +34,80 @@ void sistema::ejecutar() {
 #pragma omp parallel for num_threads(21)
     for (int i = 0; i < 21; i++) {
         if (omp_get_thread_num() == 0) {
-            while (true) {
-                this->menu();
-            }
+            this->menu();
         } else {
-            while (true) {
-                mover(this->coches->at(i - 1));
-                while (parar) {
-                    asm("nop");   //Sistema parado
-                }
-            }
+            mover(this->coches->at(i - 1));
         }
     }
 }
 
 void sistema::menu() {
-    char opcion;
-    cout << "\nOpciones:\n"
-            "(P) -Parar y Continuar el sistema\n"
-            "(I) -Imprimir el sistema\n"
-            "(A) -Añadir coche\n"
-            "(S) -Salir" << endl;
+    while (true) {
+        char opcion;
+        cout << "\nOpciones:\n"
+                "(P) -Parar y Continuar el sistema\n"
+                "(I) -Imprimir el sistema\n"
+                "(A) -Añadir coche\n"
+                "(S) -Salir" << endl;
 
-    cin >> opcion;
+        cin >> opcion;
 
-    switch (opcion) {
-        case 'P':
-        case 'p':
-            parar = !parar;
-            break;
-        case 'I':
-        case 'i':
-            this->imprimirParking();
-            this->imprimirCoches();
-            break;
-        case 'A':
-        case 'a':
-            this->addCoche();
-            break;
-        case 'S':
-        case 's':
-            exit(0);
-        default:
-            cout << "Error! No existe la opción";
-            break;
+        switch (opcion) {
+            case 'P':
+            case 'p':
+                parar = !parar;
+                break;
+            case 'I':
+            case 'i':
+                this->imprimirParking();
+                this->imprimirCoches();
+                break;
+            case 'A':
+            case 'a':
+                this->addCoche();
+                break;
+            case 'S':
+            case 's':
+                exit(0);
+            default:
+                cout << "Error! No existe la opción";
+                break;
+        }
     }
+
 
 }
 
 void sistema::mover(coche *coche) {
     int randTime;
+    while (!parar) {
+        switch (coche->estado) {
+            case APARCADO:
+                randTime = rand() % (MIN - +MAX) + MIN;
+                usleep(randTime);
+                if (!parar) {
+                    omp_set_lock(&cerrojoAparcado);
+                    this->salir(coche);
+                    omp_unset_lock(&cerrojoAparcado);
+                }
+                break;
+            case ESPERA:
+                omp_set_lock(&cerrojoEspera);
+                aparcar(coche);
+                omp_unset_lock(&cerrojoEspera);
+                break;
+            case OCIOSO:
+                randTime = rand() % (MIN - +MAX) + MIN;
+                if (!parar) {
+                    usleep(randTime);
+                    coche->estado = ESPERA;
+                }
+                break;
+        }
+    }
 
-    switch (coche->estado) {
-        case APARCADO:
-            randTime = rand() % (MIN - +MAX) + MIN;
-            usleep(randTime);
-            if (!parar) {
-                omp_set_lock(&cerrojoAparcado);
-                this->salir(coche);
-                omp_unset_lock(&cerrojoAparcado);
-            }
-            break;
-        case ESPERA:
-            omp_set_lock(&cerrojoEspera);
-            aparcar(coche);
-            omp_unset_lock(&cerrojoEspera);
-            break;
-        case OCIOSO:
-            randTime = rand() % (MIN - +MAX) + MIN;
-            usleep(randTime);
-            if (!parar) {
-                coche->estado = ESPERA;
-            }
-            break;
+    while (parar) {
+        asm("nop");   //Sistema parado
     }
 }
 
@@ -155,17 +156,13 @@ void sistema::addCoche() {
     newCoche->estado = OCIOSO;
     this->coches->push_back(newCoche);
     this->lastId++;
+    this->numCoches++;
 #pragma omp parallel for num_threads(2)
     for (int i = 0; i < 2; i++) {
         if (omp_get_thread_num() == 0) {
-            this->menu();
+            mover(newCoche);
         } else {
-            while (true) {
-                mover(newCoche);
-                while (parar) {
-                    asm("nop");   //Sistema parado
-                }
-            }
+            this->menu();
         }
     }
 
